@@ -1,16 +1,28 @@
-import { Alert, StatusBar, StyleSheet, Text, View } from 'react-native'
-import React, { useEffect } from 'react'
-import HomeScreen from './Screens/HomeScreen'
-import AppNavigator from './Screens/AppNavigator'
+/* eslint-disable prettier/prettier */
+import React, { useEffect } from 'react';
+import {StyleSheet, View} from 'react-native';
+import AppNavigator from './Screens/AppNavigator';
+import { scheduleAllReminders } from './Components/NotificationService';
+import { ThemeProvider } from './Components/ThemeContext';
 
 const App = () => {
+  useEffect(() => {
+    scheduleAllReminders();
+  }, []);
+
   return (
-    <View style={{flex: 1}}>
-      <AppNavigator/>
-    </View>
-  )
-}
+    <ThemeProvider>
+      <View style={styles.container}>
+        <AppNavigator />
+      </View>
+    </ThemeProvider>
+  );
+};
 
-export default App
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});
 
-const styles = StyleSheet.create({})
+export default App;
