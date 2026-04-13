@@ -1,5 +1,6 @@
+/* eslint-disable react-native/no-inline-styles */
 /* eslint-disable prettier/prettier */
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
   Modal,
@@ -40,6 +41,8 @@ const transactionOptions = [
   {name: 'Savings', type: 'savings', icon: 'savings', accent: '#C4B5FD'},
   {name: 'Other', type: 'other', icon: 'category', accent: '#FCA5A5'},
 ];
+
+const creditTransactionTypes = ['income', 'salary'];
 
 const notificationOptions = {
   enableVibrateFallback: true,
@@ -87,6 +90,9 @@ const HomeScreen = () => {
   const [resetPin, setResetPin] = useState('');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isQuickEntry, setIsQuickEntry] = useState(false);
+  const chartScrollRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(0);
+  const [selectedBarIndex, setSelectedBarIndex] = useState(null);
 
   // Initialize to the first day of the current month
   const [selectedReportMonth, setSelectedReportMonth] = useState(() => {
@@ -169,6 +175,15 @@ const HomeScreen = () => {
       return accumulator;
     }, {});
 
+    const totalAmount = Object.entries(categories).reduce(
+      (runningTotal, [type, amount]) =>
+        runningTotal +
+        (creditTransactionTypes.includes(type)
+          ? Number(amount) || 0
+          : -(Number(amount) || 0)),
+      0,
+    );
+
     const now = new Date();
     const spentToday = allTransactions
       .filter(item => {
@@ -182,9 +197,72 @@ const HomeScreen = () => {
 
     return {
       categories,
+      totalAmount,
       spentToday,
     };
   }, [allTransactions, selectedReportMonth]);
+
+  // Calculate day-by-day consumption for the selected month
+  const dailyConsumptionData = useMemo(() => {
+    const targetDate = new Date(selectedReportMonth);
+    const targetMonth = targetDate.getMonth();
+    const targetYear = targetDate.getFullYear();
+    const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+
+    // Initialize an array for all days in the month (1st to 28th/30th/31st)
+    const days = Array.from({length: daysInMonth}, (_, i) => ({
+      day: i + 1,
+      value: 0,
+    }));
+
+    // Sum up only expenses (filter out income/salary) for each day
+    allTransactions.forEach(item => {
+      const itemDate = new Date(item.date);
+      if (
+        itemDate.getMonth() === targetMonth &&
+        itemDate.getFullYear() === targetYear &&
+        !creditTransactionTypes.includes(item.type) // Exclude credits
+      ) {
+        const dayIndex = itemDate.getDate() - 1;
+        days[dayIndex].value += Number(item.amount) || 0;
+      }
+    });
+
+    return days;
+  }, [allTransactions, selectedReportMonth]);
+
+  // Find the max value to scale the bars properly
+  const maxDailyValue = Math.max(...dailyConsumptionData.map(d => d.value), 1);
+
+  // Find the array index for today (if we are viewing the current month)
+  const todayIndex = useMemo(() => {
+    const targetDate = new Date(selectedReportMonth);
+    const now = new Date();
+    if (
+      targetDate.getMonth() === now.getMonth() &&
+      targetDate.getFullYear() === now.getFullYear()
+    ) {
+      return now.getDate() - 1;
+    }
+    return -1; // We are looking at a past/future month
+  }, [selectedReportMonth]);
+
+  // Auto-scroll to center today's date whenever the chart loads or month changes
+  useEffect(() => {
+    if (chartScrollRef.current && chartWidth > 0 && todayIndex !== -1) {
+      const itemWidth = 38; // 24px width + 14px marginRight
+      const centerOffset =
+        todayIndex * itemWidth - chartWidth / 2 + itemWidth / 2;
+
+      // Brief timeout ensures the ScrollView has fully rendered its content before moving
+      setTimeout(() => {
+        chartScrollRef.current?.scrollTo({
+          x: Math.max(0, centerOffset),
+          animated: true,
+        });
+      }, 300);
+    }
+  }, [todayIndex, chartWidth, dailyConsumptionData]);
 
   const handleOpenEntry = (item, isQuick = false) => {
     setSelectedItem(item);
@@ -385,44 +463,6 @@ const HomeScreen = () => {
         </Animated.View>
 
         <Animated.View
-          entering={FadeInDown.delay(300).duration(500)}
-          style={styles.statsGrid}>
-          {statItems.map((item, index) => {
-            const isLastOdd =
-              index === statItems.length - 1 && statItems.length % 2 !== 0;
-            const cardBg = isDarkMode ? item.bg : '#FFFFFF';
-            return (
-              <View
-                key={item.label}
-                style={[
-                  styles.statCardGrid,
-                  {
-                    backgroundColor: cardBg,
-                    width: isLastOdd ? '100%' : '48%',
-                    borderWidth: isDarkMode ? 0 : 1,
-                    borderColor: colors.border,
-                  },
-                ]}>
-                <Text
-                  style={[
-                    styles.statLabel,
-                    {color: isDarkMode ? '#CBD5E1' : colors.textMuted},
-                  ]}>
-                  {item.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.statValue,
-                    {color: isDarkMode ? '#FFFFFF' : colors.text},
-                  ]}>
-                  {formatCurrency(item.value)}
-                </Text>
-              </View>
-            );
-          })}
-        </Animated.View>
-
-        <Animated.View
           entering={FadeInDown.delay(400).duration(500)}
           style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, {color: colors.text}]}>
@@ -526,10 +566,7 @@ const HomeScreen = () => {
                 color: t.accent,
               }))
               .filter(t => t.value > 0)}
-            total={Object.values(reportData.categories).reduce(
-              (a, b) => a + (Number(b) || 0),
-              0,
-            )}
+            total={reportData.totalAmount}
           />
           <View style={{marginTop: 16}}>
             {transactionOptions.map(item => (
@@ -568,6 +605,122 @@ const HomeScreen = () => {
             ))}
           </View>
         </Animated.View>
+
+        {/* --- DAILY CONSUMPTION CHART --- */}
+        <Animated.View
+          entering={FadeInDown.delay(750).duration(500)}
+          style={[
+            styles.reportCard,
+            {
+              backgroundColor: colors.surface,
+              borderWidth: isDarkMode ? 0 : 1,
+              borderColor: colors.border,
+            },
+          ]}>
+          <Text
+            style={[
+              styles.reportLabel,
+              {color: colors.text, marginBottom: 16, fontWeight: '700'},
+            ]}>
+            Daily Consumption
+          </Text>
+
+          <ScrollView
+            ref={chartScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            onLayout={event => setChartWidth(event.nativeEvent.layout.width)}
+            contentContainerStyle={{
+              alignItems: 'flex-end',
+              paddingBottom: 8,
+              paddingRight: 16,
+              paddingTop: 30, // Added padding so the tooltip doesn't get clipped
+            }}>
+            {dailyConsumptionData.map((item, index) => {
+              const heightPercent =
+                item.value > 0
+                  ? Math.max((item.value / maxDailyValue) * 100, 4)
+                  : 0;
+
+              const isToday = todayIndex === index;
+              const isSelected = selectedBarIndex === index;
+
+              return (
+                <Pressable
+                  key={index}
+                  onPress={() => setSelectedBarIndex(isSelected ? null : index)}
+                  style={{
+                    alignItems: 'center',
+                    marginRight: 14,
+                    width: 24,
+                    position: 'relative',
+                  }}>
+                  {/* Tooltip showing the exact amount when tapped */}
+                  {isSelected && item.value > 0 && (
+                    <Animated.View
+                      entering={FadeInDown.duration(200)}
+                      style={{
+                        position: 'absolute',
+                        top: -30,
+                        backgroundColor: isDarkMode ? '#334155' : '#E2E8F0',
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                        zIndex: 10,
+                        minWidth: 50,
+                        alignItems: 'center',
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '800',
+                          color: isDarkMode ? '#F8FAFC' : '#0F172A',
+                        }}>
+                        {formatCurrency(item.value).replace('Rs ', '₹')}
+                      </Text>
+                    </Animated.View>
+                  )}
+
+                  <View
+                    style={{
+                      height: 120, // Max height of the bar chart
+                      width: 8,
+                      backgroundColor: isDarkMode
+                        ? 'rgba(255,255,255,0.05)'
+                        : 'rgba(0,0,0,0.05)',
+                      borderRadius: 4,
+                      justifyContent: 'flex-end',
+                    }}>
+                    <Animated.View
+                      style={{
+                        height: `${heightPercent}%`,
+                        width: '100%',
+                        backgroundColor: isToday
+                          ? '#C4B5FD' // Highlight today
+                          : item.value > 0
+                          ? isDarkMode
+                            ? '#94A3B8'
+                            : '#64748B'
+                          : 'transparent',
+                        borderRadius: 4,
+                      }}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      fontSize: 10,
+                      color: isToday ? colors.text : colors.textMuted,
+                      fontWeight: isToday ? '800' : '500',
+                    }}>
+                    {item.day}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Animated.View>
+        {/* --- END DAILY CONSUMPTION CHART --- */}
 
         <Animated.View
           entering={FadeInDown.delay(800).duration(500)}
@@ -624,7 +777,9 @@ const HomeScreen = () => {
         </Animated.View>
 
         <View style={styles.versionContainer}>
-          <Text style={[styles.versionText, {color: colors.textMuted}]}>v{version}</Text>
+          <Text style={[styles.versionText, {color: colors.textMuted}]}>
+            v{version}
+          </Text>
         </View>
       </ScrollView>
 

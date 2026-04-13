@@ -2,6 +2,7 @@
 import React from 'react';
 import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
+import SplashScreen from './SplashScreen';
 import HomeScreen from './HomeScreen';
 import TransactionHistoryScreen from './TransactionHistoryScreen';
 import { useTheme } from '../Components/ThemeContext';
@@ -41,7 +42,14 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer theme={appTheme}>
-      <Stack.Navigator screenOptions={screenOptions}>
+      <Stack.Navigator
+        initialRouteName="SplashScreen"
+        screenOptions={screenOptions}>
+        <Stack.Screen
+          name="SplashScreen"
+          component={SplashScreen}
+          options={{headerShown: false}}
+        />
         <Stack.Screen
           name="HomeScreen"
           component={HomeScreen}

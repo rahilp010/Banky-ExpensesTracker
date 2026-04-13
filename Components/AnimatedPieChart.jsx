@@ -12,8 +12,8 @@ import { useTheme } from './ThemeContext';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-const DonutSlice = ({ item, total, circumference, radius, strokeWidth, progress, offset }) => {
-    const slicePercentage = total === 0 ? 0 : item.value / total;
+const DonutSlice = ({ item, chartTotal, circumference, radius, strokeWidth, progress, offset }) => {
+    const slicePercentage = chartTotal === 0 ? 0 : item.value / chartTotal;
     const strokeDasharray = `${circumference} ${circumference}`;
 
     const animatedProps = useAnimatedProps(() => {
@@ -47,6 +47,7 @@ const DonutChart = ({ data, total }) => {
     const radius = 70;
     const strokeWidth = 20;
     const circumference = 2 * Math.PI * radius;
+    const chartTotal = data.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
 
     const progress = useSharedValue(0);
 
@@ -74,14 +75,14 @@ const DonutChart = ({ data, total }) => {
                     />
                     {data.map((item, index) => {
                         const offset = currentOffset;
-                        const slicePercentage = total === 0 ? 0 : item.value / total;
+                        const slicePercentage = chartTotal === 0 ? 0 : item.value / chartTotal;
                         currentOffset += slicePercentage * circumference;
 
                         return (
                             <DonutSlice
                                 key={index}
                                 item={item}
-                                total={total}
+                                chartTotal={chartTotal}
                                 circumference={circumference}
                                 radius={radius}
                                 strokeWidth={strokeWidth}
@@ -95,7 +96,7 @@ const DonutChart = ({ data, total }) => {
             <View style={styles.centerTextContainer}>
                <Text style={[styles.centerLabel, { color: colors.textMuted }]}>Total</Text>
                <Text style={[styles.centerValue, { color: colors.text }]}>
-                   {total > 0 ? 'Rs ' + total.toLocaleString('en-IN') : '0'}
+                   {'Rs ' + Number(total || 0).toLocaleString('en-IN')}
                </Text>
             </View>
         </View>
