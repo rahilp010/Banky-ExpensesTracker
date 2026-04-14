@@ -3,7 +3,7 @@
     <item android:gravity="center">
         <shape android:shape="rectangle">
             <size android:width="124dp" android:height="124dp" />
-            <corners android:radius="36dp" />
+            <corners android:radius="62dp" />
             <solid android:color="@color/bootsplash_logo_background" />
         </shape>
     </item>

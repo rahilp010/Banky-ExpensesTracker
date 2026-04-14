@@ -22,6 +22,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {trigger} from 'react-native-haptic-feedback';
 import Animated, {FadeInDown} from 'react-native-reanimated';
 import DonutChart from '../Components/AnimatedPieChart';
+import BootSplash from 'react-native-bootsplash';
 import {useTheme} from '../Components/ThemeContext';
 import ThemeTransitionOverlay from '../Components/ThemeTransitionOverlay';
 import {triggerTestNotification} from '../Components/NotificationService';
@@ -127,6 +128,7 @@ const HomeScreen = () => {
 
   useEffect(() => {
     loadDashboard();
+    BootSplash.hide({fade: true}).catch(() => {});
   }, []);
 
   useEffect(() => {
