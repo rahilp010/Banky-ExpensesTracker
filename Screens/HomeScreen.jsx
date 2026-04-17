@@ -155,6 +155,7 @@ const HomeScreen = () => {
   }, []);
 
   const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
 
   // Updated to filter by the specific selected report month
   const reportData = useMemo(() => {
@@ -274,6 +275,7 @@ const HomeScreen = () => {
     setSelectedMonth(
       new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
     );
+    setSelectedDay(now.getDate());
     setModalVisible(true);
   };
 
@@ -286,9 +288,9 @@ const HomeScreen = () => {
     }
 
     try {
-      // Use the middle of the selected month to ensure it falls within the correct month range
+      // Incorporate the selected day into the ISO string
       const date = new Date(selectedMonth);
-      date.setDate(15);
+      date.setDate(selectedDay);
 
       await addTransaction({
         amount,
@@ -824,7 +826,17 @@ const HomeScreen = () => {
                 {monthOptions.map(m => (
                   <Pressable
                     key={m.value}
-                    onPress={() => setSelectedMonth(m.value)}
+                    onPress={() => {
+                      setSelectedMonth(m.value);
+                      const maxDays = new Date(
+                        new Date(m.value).getFullYear(),
+                        new Date(m.value).getMonth() + 1,
+                        0,
+                      ).getDate();
+                      if (selectedDay > maxDays) {
+                        setSelectedDay(maxDays);
+                      }
+                    }}
                     style={[
                       styles.monthPill,
                       {borderColor: colors.border},
@@ -852,11 +864,69 @@ const HomeScreen = () => {
                   <Text
                     style={[
                       styles.modalLabel,
+                      {color: colors.textMuted, marginTop: 4},
+                    ]}>
+                    Select date
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={[
+                      styles.pillContainer,
+                      {marginBottom: 10},
+                    ]}>
+                    {Array.from(
+                      {
+                        length: new Date(
+                          new Date(selectedMonth).getFullYear(),
+                          new Date(selectedMonth).getMonth() + 1,
+                          0,
+                        ).getDate(),
+                      },
+                      (_, i) => i + 1,
+                    ).map(day => (
+                      <Pressable
+                        key={day}
+                        onPress={() => setSelectedDay(day)}
+                        style={[
+                          styles.dayPill,
+                          {borderColor: colors.border},
+                          selectedDay === day && {
+                            backgroundColor: colors.buttonBackground,
+                            borderColor: colors.buttonBackground,
+                          },
+                        ]}>
+                        <Text
+                          style={[
+                            styles.pillText,
+                            {color: colors.text},
+                            selectedDay === day && {
+                              color: isDarkMode ? '#0B1220' : '#FFFFFF',
+                            },
+                          ]}>
+                          {day}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              {!isQuickEntry && (
+                <>
+                  <Text
+                    style={[
+                      styles.modalLabel,
                       {color: colors.textMuted, marginTop: 14},
                     ]}>
                     Entry type
                   </Text>
-                  <View style={[styles.pillContainer, {flexWrap: 'wrap'}]}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
+                      justifyContent: 'space-between',
+                    }}>
                     {transactionOptions.map(item => {
                       const isSelected = selectedItem.type === item.type;
                       return (
@@ -865,7 +935,12 @@ const HomeScreen = () => {
                           onPress={() => setSelectedItem(item)}
                           style={[
                             styles.typePill,
-                            {borderColor: item.accent},
+                            {
+                              borderColor: item.accent,
+                              width: '32%',
+                              marginBottom: 10,
+                              justifyContent: 'center',
+                            },
                             isSelected && {backgroundColor: item.accent},
                           ]}>
                           <Icon
@@ -1369,6 +1444,14 @@ const styles = StyleSheet.create({
   monthPill: {
     paddingHorizontal: 12,
     paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  dayPill: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 14,
     borderWidth: 1.5,
   },
