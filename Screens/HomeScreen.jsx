@@ -20,7 +20,14 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import {useNavigation} from '@react-navigation/native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {trigger} from 'react-native-haptic-feedback';
-import Animated, {FadeInDown} from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import DonutChart from '../Components/AnimatedPieChart';
 import BootSplash from 'react-native-bootsplash';
 import {useTheme} from '../Components/ThemeContext';
@@ -36,6 +43,7 @@ import {
   getTransactions,
 } from '../Components/db';
 import {version} from '../package.json';
+import {useNotification} from '../Components/NotificationContext';
 
 const transactionOptions = [
   {name: 'Deposit', type: 'income', icon: 'south-west', accent: '#A7F3D0'},
@@ -53,15 +61,6 @@ const notificationOptions = {
   ignoreAndroidSystemSettings: false,
 };
 
-const showMessage = message => {
-  if (Platform.OS === 'android') {
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-    return;
-  }
-
-  Alert.alert('Banky', message);
-};
-
 const formatCurrency = value =>
   `Rs ${Number(value || 0).toLocaleString('en-IN', {
     maximumFractionDigits: 0,
@@ -76,6 +75,12 @@ const formatDate = value =>
 
 const HomeScreen = () => {
   const navigation = useNavigation();
+  const {showNotification} = useNotification();
+
+  const showMessage = (message, type = 'info', title = 'Banky') => {
+    showNotification({title, message, type});
+  };
+
   const [summary, setSummary] = useState({
     balance: 0,
     income: 0,
@@ -105,6 +110,25 @@ const HomeScreen = () => {
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   });
 
+  const scrollY = useSharedValue(0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: event => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const floatingPillStyle = useAnimatedStyle(() => {
+    const isVisible = scrollY.value > 50;
+    return {
+      opacity: withTiming(isVisible ? 1 : 0, {duration: 200}),
+      transform: [
+        {scale: withSpring(isVisible ? 1 : 0.8)},
+        {translateY: withSpring(isVisible ? 0 : -20)},
+      ],
+    };
+  });
+
   const handleThemeToggle = () => {
     setIsTransitioning(true);
     toggleTheme();
@@ -124,7 +148,7 @@ const HomeScreen = () => {
       setAllTransactions(transactions);
     } catch (error) {
       console.log('Dashboard load error:', error);
-      showMessage('Unable to refresh your dashboard.');
+      showMessage('Unable to refresh your dashboard.', 'error', 'Oops!');
     } finally {
       setLoading(false);
     }
@@ -287,7 +311,7 @@ const HomeScreen = () => {
     const amount = parseFloat(formValue);
 
     if (!amount || amount <= 0) {
-      showMessage('Enter a valid amount.');
+      showMessage('Enter a valid amount.', 'warning', 'Alert');
       return;
     }
 
@@ -304,18 +328,18 @@ const HomeScreen = () => {
       trigger('notificationSuccess', notificationOptions);
       setModalVisible(false);
       await loadDashboard();
-      showMessage(`${selectedItem.name} saved.`);
+      showMessage(`${selectedItem.name} saved.`, 'success', 'Success');
     } catch (error) {
       console.log('Add transaction error:', error);
       trigger('notificationError', notificationOptions);
-      showMessage('Unable to save this entry.');
+      showMessage('Unable to save this entry.', 'error', 'Oops!');
     }
   };
 
   const handleReset = async () => {
     if (resetPin !== '1009') {
       trigger('notificationError', notificationOptions);
-      showMessage('Incorrect PIN.');
+      showMessage('Incorrect PIN.', 'error', 'Oops!');
       return;
     }
 
@@ -325,10 +349,10 @@ const HomeScreen = () => {
       setResetVisible(false);
       setResetPin('');
       await loadDashboard();
-      showMessage('All entries cleared.');
+      showMessage('All entries cleared.', 'success', 'Success');
     } catch (error) {
       console.log('Reset error:', error);
-      showMessage('Unable to clear entries.');
+      showMessage('Unable to clear entries.', 'error', 'Oops!');
     }
   };
 
@@ -348,7 +372,7 @@ const HomeScreen = () => {
 
       const exists = await RNFS.exists(dbPath);
       if (!exists) {
-        showMessage('Database file not found.');
+        showMessage('Database file not found.', 'warning', 'Alert');
         return;
       }
 
@@ -360,10 +384,16 @@ const HomeScreen = () => {
       }/Banky_Backup_${timestamp}.db`;
 
       await RNFS.copyFile(dbPath, destPath);
-      showMessage(`Exported to ${Platform.OS === 'android' ? 'Downloads' : 'Documents'} folder.`);
+      showMessage(
+        `Exported to ${
+          Platform.OS === 'android' ? 'Downloads' : 'Documents'
+        } folder.`,
+        'success',
+        'Success',
+      );
     } catch (error) {
       console.log('Export error:', error);
-      showMessage('Export failed.');
+      showMessage('Export failed.', 'error', 'Oops!');
     }
   };
 
@@ -375,7 +405,7 @@ const HomeScreen = () => {
 
       const pickedFile = res[0];
       if (!pickedFile.name.endsWith('.db')) {
-        showMessage('Please select a valid .db file.');
+        showMessage('Please select a valid .db file.', 'warning', 'Alert');
         return;
       }
 
@@ -398,17 +428,17 @@ const HomeScreen = () => {
       await closeDatabase();
       await RNFS.writeFile(dbPath, fileContent, 'base64');
       setBackupVisible(false);
-      Alert.alert(
-        'Import Successful',
+      showMessage(
         'Database has been imported. Please restart the app for changes to take effect.',
-        [{text: 'OK'}],
+        'success',
+        'Import Successful',
       );
     } catch (err) {
       if (DocumentPicker.isCancel(err)) {
         // User cancelled the picker
       } else {
         console.log('Import error:', err);
-        showMessage('Import failed.');
+        showMessage('Import failed.', 'error', 'Oops!');
       }
     }
   };
@@ -428,7 +458,27 @@ const HomeScreen = () => {
         />
       )}
 
-      <ScrollView
+      <Animated.View
+        style={[
+          styles.floatingTopPill,
+          {
+            backgroundColor: isDarkMode
+              ? 'rgba(30, 41, 59, 0.85)'
+              : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDarkMode
+              ? 'rgba(255, 255, 255, 0.15)'
+              : 'rgba(0, 0, 0, 0.05)',
+          },
+          floatingPillStyle,
+        ]}>
+        <Text style={[styles.floatingPillText, {color: colors.text}]}>
+          Banky
+        </Text>
+      </Animated.View>
+
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         style={[styles.container, {backgroundColor: colors.background}]}
         contentContainerStyle={styles.content}>
         <Animated.View
@@ -491,7 +541,7 @@ const HomeScreen = () => {
                 <Text style={[styles.metaLabel, {color: colors.textMuted}]}>
                   Entries logged
                 </Text>
-                <Text style={[styles.metaValue, {color: colors.text}]}>``
+                <Text style={[styles.metaValue, {color: colors.text}]}>
                   {summary.transactionCount}
                 </Text>
               </View>
@@ -871,7 +921,7 @@ const HomeScreen = () => {
             v{version}
           </Text>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* FIXED NEW ENTRY MODAL */}
       <Modal
@@ -1148,7 +1198,6 @@ const HomeScreen = () => {
           </View>
         </View>
       </Modal>
-
       <Modal
         visible={backupVisible}
         transparent
@@ -1176,8 +1225,13 @@ const HomeScreen = () => {
                 <Icon name="close" size={24} color={colors.textMuted} />
               </Pressable>
             </View>
-            <Text style={[styles.resetSubtitle, {color: colors.textMuted, marginBottom: 30}]}>
-              Export your transaction history to a .db file or import an existing backup.
+            <Text
+              style={[
+                styles.resetSubtitle,
+                {color: colors.textMuted, marginBottom: 30},
+              ]}>
+              Export your transaction history to a .db file or import an
+              existing backup.
             </Text>
 
             <Pressable
@@ -1198,14 +1252,14 @@ const HomeScreen = () => {
             <Pressable
               style={[
                 styles.modalPrimaryAction,
-                {backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', marginBottom: 12},
+                {
+                  backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0',
+                  marginBottom: 12,
+                },
               ]}
               onPress={handleImport}>
               <Text
-                style={[
-                  styles.modalPrimaryTextEnhanced,
-                  {color: colors.text},
-                ]}>
+                style={[styles.modalPrimaryTextEnhanced, {color: colors.text}]}>
                 Import from File
               </Text>
             </Pressable>
@@ -1227,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 32,
+    paddingBottom: 110,
   },
   heroCard: {
     borderRadius: 28,
@@ -1657,6 +1711,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
     opacity: 0.6,
+  },
+  floatingTopPill: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 30,
+    left: 20,
+    zIndex: 1000,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 30,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {width: 0, height: 4},
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  floatingPillText: {
+    fontSize: 20,
+    fontWeight: '800',
+    paddingHorizontal: 5,
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
 });
 

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../Components/ThemeContext';
 import { getTransactions } from '../Components/db';
+import { useNotification } from '../Components/NotificationContext';
 
 const filters = [
     { label: 'All', value: 'all' },
@@ -35,12 +36,6 @@ const accentByType = {
     other: '#EF4444',
 };
 
-const showMessage = message => {
-    if (Platform.OS === 'android') {
-        ToastAndroid.show(message, ToastAndroid.SHORT);
-    }
-};
-
 const formatCurrency = value =>
     `Rs ${Number(value || 0).toLocaleString('en-IN', {
         maximumFractionDigits: 0,
@@ -57,6 +52,12 @@ const formatDateInput = value => value.toISOString().split('T')[0];
 
 const TransactionHistoryScreen = () => {
     const { isDarkMode, colors } = useTheme();
+    const { showNotification } = useNotification();
+
+    const showMessage = (message, type = 'info', title = 'Banky') => {
+        showNotification({ title, message, type });
+    };
+
     const [transactions, setTransactions] = useState([]);
     const [selectedType, setSelectedType] = useState('all');
     const [startDate, setStartDate] = useState(null);
@@ -75,7 +76,7 @@ const TransactionHistoryScreen = () => {
                 setTransactions(rows);
             } catch (error) {
                 console.log('History load error:', error);
-                showMessage('Unable to load history.');
+                showMessage('Unable to load history.', 'error');
             }
         };
 
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: 20,
-        paddingBottom: 32,
+        paddingBottom: 110,
     },
     headerCard: {
         backgroundColor: '#0D192B',

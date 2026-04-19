@@ -4,7 +4,10 @@ import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import HomeScreen from './HomeScreen';
 import TransactionHistoryScreen from './TransactionHistoryScreen';
+import SettingsScreen from './SettingsScreen';
 import { useTheme } from '../Components/ThemeContext';
+import FloatingNavbar from '../Components/FloatingNavbar';
+import { View, StyleSheet } from 'react-native';
 
 const Stack = createStackNavigator();
 
@@ -41,20 +44,28 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer theme={appTheme}>
-      <Stack.Navigator
-        initialRouteName="HomeScreen"
-        screenOptions={screenOptions}>
-        <Stack.Screen
-          name="HomeScreen"
-          component={HomeScreen}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen
-          name="TransactionHistoryScreen"
-          component={TransactionHistoryScreen}
-          options={{headerTitle: 'Reports & History'}}
-        />
-      </Stack.Navigator>
+      <View style={{ flex: 1 }}>
+        <Stack.Navigator
+          initialRouteName="HomeScreen"
+          screenOptions={screenOptions}>
+          <Stack.Screen
+            name="HomeScreen"
+            component={HomeScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="TransactionHistoryScreen"
+            component={TransactionHistoryScreen}
+            options={{ headerTitle: 'Reports & History' }}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{ headerTitle: 'App Settings' }}
+          />
+        </Stack.Navigator>
+        <FloatingNavbar />
+      </View>
     </NavigationContainer>
   );
 };
