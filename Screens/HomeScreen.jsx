@@ -26,9 +26,12 @@ import BootSplash from 'react-native-bootsplash';
 import {useTheme} from '../Components/ThemeContext';
 import ThemeTransitionOverlay from '../Components/ThemeTransitionOverlay';
 import {triggerTestNotification} from '../Components/NotificationService';
+import RNFS from 'react-native-fs';
+import DocumentPicker from 'react-native-document-picker';
 import {
   addTransaction,
   clearTransactions,
+  closeDatabase,
   getDashboardSummary,
   getTransactions,
 } from '../Components/db';
@@ -90,6 +93,7 @@ const HomeScreen = () => {
   const [formValue, setFormValue] = useState('');
   const [resetPin, setResetPin] = useState('');
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [backupVisible, setBackupVisible] = useState(false);
   const [isQuickEntry, setIsQuickEntry] = useState(false);
   const chartScrollRef = useRef(null);
   const [chartWidth, setChartWidth] = useState(0);
@@ -334,6 +338,81 @@ const HomeScreen = () => {
     {label: 'Savings', value: summary.savings, bg: '#162A26'},
   ];
 
+  const handleExport = async () => {
+    try {
+      const dbName = 'transactions.db';
+      const dbPath =
+        Platform.OS === 'android'
+          ? `/data/data/com.banky/databases/${dbName}`
+          : `${RNFS.LibraryDirectoryPath}/LocalDatabase/${dbName}`;
+
+      const exists = await RNFS.exists(dbPath);
+      if (!exists) {
+        showMessage('Database file not found.');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const destPath = `${
+        Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath
+      }/Banky_Backup_${timestamp}.db`;
+
+      await RNFS.copyFile(dbPath, destPath);
+      showMessage(`Exported to ${Platform.OS === 'android' ? 'Downloads' : 'Documents'} folder.`);
+    } catch (error) {
+      console.log('Export error:', error);
+      showMessage('Export failed.');
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      const res = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
+      });
+
+      const pickedFile = res[0];
+      if (!pickedFile.name.endsWith('.db')) {
+        showMessage('Please select a valid .db file.');
+        return;
+      }
+
+      const dbName = 'transactions.db';
+      const dbPath =
+        Platform.OS === 'android'
+          ? `/data/data/com.banky/databases/${dbName}`
+          : `${RNFS.LibraryDirectoryPath}/LocalDatabase/${dbName}`;
+
+      // Create databases folder if it doesn't exist (Android)
+      if (Platform.OS === 'android') {
+        const dbDir = '/data/data/com.banky/databases';
+        const dirExists = await RNFS.exists(dbDir);
+        if (!dirExists) {
+          await RNFS.mkdir(dbDir);
+        }
+      }
+
+      const fileContent = await RNFS.readFile(pickedFile.uri, 'base64');
+      await closeDatabase();
+      await RNFS.writeFile(dbPath, fileContent, 'base64');
+      setBackupVisible(false);
+      Alert.alert(
+        'Import Successful',
+        'Database has been imported. Please restart the app for changes to take effect.',
+        [{text: 'OK'}],
+      );
+    } catch (err) {
+      if (DocumentPicker.isCancel(err)) {
+        // User cancelled the picker
+      } else {
+        console.log('Import error:', err);
+        showMessage('Import failed.');
+      }
+    }
+  };
+
   return (
     <SafeAreaView
       style={[styles.safeArea, {backgroundColor: colors.background}]}>
@@ -355,7 +434,14 @@ const HomeScreen = () => {
         <Animated.View
           entering={FadeInDown.delay(100).duration(500)}
           style={styles.topHeader}>
-          <Text style={[styles.appTitle, {color: colors.text}]}>Banky</Text>
+          <Pressable
+            delayLongPress={5000}
+            onLongPress={() => {
+              trigger('impactHeavy', notificationOptions);
+              setBackupVisible(true);
+            }}>
+            <Text style={[styles.appTitle, {color: colors.text}]}>Banky</Text>
+          </Pressable>
           <View style={styles.headerIcons}>
             <Pressable
               style={[
@@ -405,7 +491,7 @@ const HomeScreen = () => {
                 <Text style={[styles.metaLabel, {color: colors.textMuted}]}>
                   Entries logged
                 </Text>
-                <Text style={[styles.metaValue, {color: colors.text}]}>
+                <Text style={[styles.metaValue, {color: colors.text}]}>``
                   {summary.transactionCount}
                 </Text>
               </View>
@@ -1057,6 +1143,70 @@ const HomeScreen = () => {
               <Text
                 style={[styles.modalSecondaryText, {color: colors.textMuted}]}>
                 Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={backupVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBackupVisible(false)}>
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              backgroundColor: isDarkMode
+                ? 'rgba(3, 7, 18, 0.72)'
+                : 'rgba(15, 23, 42, 0.4)',
+            },
+          ]}>
+          <View
+            style={[
+              styles.modalCardEnhanced,
+              {backgroundColor: isDarkMode ? '#0F172A' : '#FFFFFF'},
+            ]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitleEnhanced, {color: colors.text}]}>
+                Manage Database
+              </Text>
+              <Pressable onPress={() => setBackupVisible(false)}>
+                <Icon name="close" size={24} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={[styles.resetSubtitle, {color: colors.textMuted, marginBottom: 30}]}>
+              Export your transaction history to a .db file or import an existing backup.
+            </Text>
+
+            <Pressable
+              style={[
+                styles.modalPrimaryAction,
+                {backgroundColor: colors.buttonBackground},
+              ]}
+              onPress={handleExport}>
+              <Text
+                style={[
+                  styles.modalPrimaryTextEnhanced,
+                  {color: isDarkMode ? '#0B1220' : '#FFFFFF'},
+                ]}>
+                Export to Storage
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.modalPrimaryAction,
+                {backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', marginBottom: 12},
+              ]}
+              onPress={handleImport}>
+              <Text
+                style={[
+                  styles.modalPrimaryTextEnhanced,
+                  {color: colors.text},
+                ]}>
+                Import from File
               </Text>
             </Pressable>
           </View>

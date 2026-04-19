@@ -95,8 +95,22 @@ const addTransaction = async ({ amount, type, date = new Date().toISOString() })
 const clearTransactions = async () =>
     executeSql('DELETE FROM transactions');
 
+const closeDatabase = () =>
+    new Promise((resolve, reject) => {
+        db.close(
+            () => {
+                console.log('Database closed');
+                resolve();
+            },
+            error => {
+                console.log('Database close error:', error);
+                reject(error);
+            },
+        );
+    });
+
 createTable().catch(error => console.log('Create table error:', error));
 
-export { addTransaction, clearTransactions, expenseTypes, getDashboardSummary, getTransactions, incomeTypes };
+export { addTransaction, clearTransactions, closeDatabase, expenseTypes, getDashboardSummary, getTransactions, incomeTypes };
 
 export default db;
